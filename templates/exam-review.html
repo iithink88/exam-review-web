@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>互动讲评</title>
+<style>
+/* ===================== 主题色（由 colorScheme 注入） ===================== */
+:root{
+  --primary:#2980b9; --accent:#3498db; --soft:#f0f7fc; --ink:#243240; --line:#dce6ef;
+  --ok:#27ae60; --bad:#e74c3c; --warn:#e67e22;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--soft);color:var(--ink);overflow:hidden}
+
+/* ===================== 顶栏 ===================== */
+header{height:56px;background:#fff;border-bottom:2px solid var(--primary);display:flex;align-items:center;padding:0 14px;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.05);position:relative;z-index:30}
+.logo{font-weight:800;color:var(--primary);font-size:18px;white-space:nowrap}
+.title{flex:1;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.btn{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;font-size:13px;color:var(--ink);transition:.15s;user-select:none}
+.btn:hover{border-color:var(--accent);color:var(--primary)}
+.btn.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+/* ===================== 布局 ===================== */
+.wrap{display:flex;height:calc(100% - 56px)}
+
+/* 大纲：悬停展开 */
+.outline{width:46px;background:#fff;border-right:1px solid var(--line);overflow:hidden;transition:width .2s;position:relative;z-index:20}
+.outline:hover{width:240px;box-shadow:4px 0 16px rgba(0,0,0,.08)}
+.outline h3{font-size:12px;color:#9aa7b2;padding:12px 14px 6px;white-space:nowrap}
+.sec{padding:4px 0}
+.sec-title{padding:6px 14px;font-weight:700;font-size:13px;color:var(--primary);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.sec-title .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.qitem{padding:5px 14px 5px 28px;font-size:13px;color:#5a6b78;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid transparent}
+.qitem:hover{background:var(--soft);color:var(--primary)}
+.qitem.active{background:var(--soft);color:var(--primary);border-left-color:var(--primary);font-weight:700}
+
+/* 主区 */
+.main{flex:1;overflow:auto;padding:18px;position:relative}
+.qcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 26px;max-width:920px;margin:0 auto;box-shadow:0 4px 18px rgba(0,0,0,.04);transform-origin:center top;transition:transform .08s}
+.qhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.tag{background:var(--soft);color:var(--primary);font-size:12px;padding:3px 10px;border-radius:20px;font-weight:700}
+.qno{font-size:13px;color:#9aa7b2}
+.passage{background:var(--soft);border-radius:10px;padding:14px 16px;line-height:1.9;font-size:15px;margin-bottom:14px;white-space:pre-wrap}
+.stem{font-size:17px;font-weight:600;line-height:1.8;margin-bottom:14px;white-space:pre-wrap}
+.opts{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
+.opt{cursor:pointer;border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:15px;transition:.12s;display:flex;gap:10px;align-items:flex-start}
+.opt:hover{border-color:var(--accent)}
+.opt .mk{font-weight:800;color:var(--primary)}
+.opt.sel{border-color:var(--primary);background:var(--soft)}
+.opt.right{background:#eafaf0;border-color:var(--ok);color:#1e7e45}
+.opt.wrong{background:#fdecea;border-color:var(--bad);color:#b03227}
+.answerbar{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.answer{font-size:14px;color:var(--ok);font-weight:700;min-height:20px}
+
+/* 词汇/翻译 */
+mark.v{background:linear-gradient(transparent 60%, #ffe9a8 60%);color:var(--primary);cursor:pointer;font-weight:700;padding:0 2px;border-radius:3px}
+mark.v:hover{background:#ffe08a}
+.sent{cursor:pointer;border-left:3px solid var(--line);padding:6px 12px;margin:8px 0;border-radius:6px;line-height:1.8;font-size:15px;transition:.12s}
+.sent:hover{border-left-color:var(--accent);background:var(--soft)}
+.sent .zh{display:none;color:#7a5230;margin-top:4px;font-size:14px}
+.sent.open .zh{display:block}
+
+/* 底部导航 */
+.nav{display:flex;justify-content:center;align-items:center;gap:14px;margin:18px auto 4px;max-width:920px}
+.nav .pg{font-size:13px;color:#9aa7b2}
+
+/* ===================== 侧/弹面板 ===================== */
+.overlay{position:fixed;inset:0;background:rgba(20,30,40,.45);z-index:50;display:none;align-items:center;justify-content:center}
+.overlay.show{display:flex}
+.panel{background:#fff;border-radius:16px;max-width:680px;width:92%;max-height:86vh;overflow:auto;padding:24px 28px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.panel h2{color:var(--primary);font-size:19px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.panel .close{float:right;cursor:pointer;color:#9aa7b2;font-size:22px;line-height:1}
+.el{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.el b{color:var(--primary);display:inline-block;min-width:74px}
+.el.lead{background:var(--soft);border-color:var(--accent)}
+.steps{list-style:decimal;padding-left:22px;line-height:1.9}
+.excl{list-style:disc;padding-left:22px;line-height:1.9;color:#b03227}
+
+/* 引导分步 */
+.gstep{margin-bottom:18px}
+.gstep .q{font-size:16px;font-weight:700;margin-bottom:10px}
+.gopts{display:flex;flex-direction:column;gap:8px}
+.gopt{cursor:pointer;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px;transition:.12s}
+.gopt:hover{border-color:var(--accent)}
+.gopt.correct{background:#eafaf0;border-color:var(--ok);color:#1e7e45}
+.gopt.wrong{background:#fdecea;border-color:var(--bad);color:#b03227}
+.fb{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:14px;line-height:1.7;display:none}
+.fb.show{display:block}
+.fb.ok{background:#eafaf0;color:#1e7e45}
+.fb.no{background:#fdecea;color:#b03227}
+.gnext{margin-top:12px}
+.dots{display:flex;gap:6px;margin:4px 0 14px}
+.dots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.dots i.done{background:var(--ok)}
+.dots i.cur{background:var(--primary)}
+
+/* 词汇弹窗 */
+#vocabPop{position:fixed;z-index:80;background:#fff;border:2px solid var(--primary);border-radius:12px;padding:14px 16px;width:300px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:none;font-size:14px;line-height:1.7}
+#vocabPop .vw{font-size:18px;font-weight:800;color:var(--primary)}
+#vocabPop .vp{color:var(--warn);font-weight:700}
+#vocabPop .close{position:absolute;top:6px;right:10px;cursor:pointer;color:#9aa7b2}
+#vocabPop .lab{color:var(--primary);font-weight:700}
+
+/* 点名 */
+.roll{text-align:center}
+.roll .name{font-size:64px;font-weight:800;color:var(--primary);min-height:90px;line-height:90px;letter-spacing:4px}
+.roll textarea{width:100%;height:90px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;margin-top:12px;resize:none;font-family:inherit}
+.roll .row{display:flex;gap:10px;justify-content:center;margin-top:12px}
+
+/* 计时器 */
+.timer{text-align:center}
+.timer .big{font-size:72px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums;letter-spacing:2px}
+.timer .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+
+/* 批注画布 */
+#annoCanvas{position:absolute;inset:0;z-index:40;pointer-events:none;cursor:crosshair}
+.annoTip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid var(--accent);border-radius:20px;padding:6px 14px;font-size:13px;color:var(--primary);z-index:45;display:none;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.annoTip.show{display:block}
+
+/* 放大镜控制 */
+.magCtrl{position:absolute;top:14px;right:14px;background:#fff;border:1px solid var(--accent);border-radius:20px;padding:5px 8px;display:none;align-items:center;gap:6px;z-index:45;box-shadow:0 4px 12px rgba(0,0,0,.12);font-size:13px}
+.magCtrl.show{display:flex}
+.magCtrl b{color:var(--primary)}
+.hint{font-size:12px;color:#9aa7b2;margin-top:8px;text-align:center}
+audio{width:100%;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">📘 互动讲评</span>
+  <span class="title" id="hdrTitle">试卷互动讲评</span>
+  <div class="tools">
+    <span class="btn" id="btnGuide">🧭 引导</span>
+    <span class="btn" id="btnReview">📖 讲评</span>
+    <span class="btn" id="btnMag">🔍 放大镜</span>
+    <span class="btn" id="btnRoll">🎲 点名</span>
+    <span class="btn" id="btnAnno">✏️ 批注</span>
+    <span class="btn" id="btnTimer">⏰ 计时</span>
+    <span class="btn" id="btnFs">🖥️ 全屏</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="outline" id="outline"><h3>试卷大纲</h3><div id="outlineBody"></div></aside>
+  <main class="main" id="main">
+    <div class="qcard" id="qcard">
+      <div class="magCtrl" id="magCtrl">🔍 倍数 <b id="magVal">1.0</b>× <span class="btn" id="magReset">复位</span></div>
+      <canvas id="annoCanvas"></canvas>
+      <div id="qbody"></div>
+    </div>
+    <div class="annoTip" id="annoTip">✏️ 批注模式：在题目上拖动鼠标即可画线 · 再次点「批注」退出</div>
+    <div class="nav">
+      <span class="btn" id="prevBtn">← 上一题</span>
+      <span class="pg" id="pgInfo">1 / 1</span>
+      <span class="btn" id="nextBtn">下一题 →</span>
+    </div>
+  </main>
+</div>
+
+<!-- 讲评面板 -->
+<div class="overlay" id="reviewOv"><div class="panel">
+  <span class="close" data-close="reviewOv">×</span>
+  <h2>📖 八要素讲评</h2>
+  <div id="reviewBody"></div>
+</div></div>
+
+<!-- 引导面板 -->
+<div class="overlay" id="guideOv"><div class="panel">
+  <span class="close" data-close="guideOv">×</span>
+  <h2>🧭 引导 · 自己走通思路</h2>
+  <div class="dots" id="gDots"></div>
+  <div id="guideBody"></div>
+</div></div>
+
+<!-- 点名 -->
+<div class="overlay" id="rollOv"><div class="panel roll">
+  <span class="close" data-close="rollOv">×</span>
+  <h2>🎲 随机点名</h2>
+  <div class="name" id="rollName">准备</div>
+  <div class="row">
+    <span class="btn primary" id="rollGo">开始</span>
+    <span class="btn" id="rollStop">停</span>
+  </div>
+  <textarea id="rollList" placeholder="每行一个名字，可编辑"></textarea>
+</div></div>
+
+<!-- 计时 -->
+<div class="overlay" id="timerOv"><div class="panel timer">
+  <span class="close" data-close="timerOv">×</span>
+  <h2>⏰ 计时器</h2>
+  <div class="big" id="timerDisp">00:00</div>
+  <div class="row" id="timerRow"></div>
+</div></div>
+
+<!-- 词汇弹窗 -->
+<div id="vocabPop"><span class="close" id="vocabClose">×</span><div id="vocabBody"></div></div>
+
+<script>
+/* ===================================================================
+   考试数据：替换此块即可（其余代码无需改动）
+   - subject: 英语/数学/历史/通用（英语会启用词汇/点译/听力）
+   - colorScheme: red / orange / green / blue
+   - 每段字符串如需换行用 \n；HTML 特殊字符正常写即可
+   =================================================================== */
+const EXAM_DATA = {
+  title: "示例 · 2026 高一期中英语 互动讲评",
+  subject: "英语",
+  colorScheme: "blue",
+  roster: ["小明","小红","小刚","小丽","小强","小美","阿杰","朵朵"],
+  questions: [
+    {
+      id:"q1", section:"阅读理解",
+      passage:"The small town became a popular tourist destination after the new railway opened. Many visitors were attracted by its quiet streets and friendly people.",
+      stem:"What made the small town popular among tourists?",
+      options:["A. Its modern buildings","B. The new railway and quiet streets","C. A famous festival","D. Its large population"],
+      answer:"B",
+      vocab:[
+        {word:"destination",pos:"n.",meaning:"目的地",root:"de- + stin(站立/设定)",collocation:"tourist destination / final destination",example:"The beach is our final destination.",exam:"完形/阅读高频，常与 travel/journey 搭配"},
+        {word:"attracted",pos:"v.",meaning:"吸引（attract 的过去式）",root:"at- (向) + tract(拉)",collocation:"attract attention / attract visitors",example:"The show attracts many fans.",exam:"注意 attract 与 attack 形近易混"}
+      ],
+      sentences:[
+        {en:"The small town became a popular tourist destination after the new railway opened.",zh:"新铁路开通后，这个小镇成了受欢迎的旅游目的地。"},
+        {en:"Many visitors were attracted by its quiet streets and friendly people.",zh:"许多游客被它安静的街道和友善的居民吸引。"}
+      ],
+      review:{
+        考点:"细节理解题——定位原因",
+        设坑:"用 modern buildings / festival / population 等原文未提及的信息制造干扰",
+        易错:"读到 railway 就急着选，忽略 quiet streets 也是并列原因",
+        补救:"圈出题干 made...popular 问'原因'，回原文找 after / by 引导的因果表述",
+        解题步骤:["① 题干划关键词 popular among tourists","② 回原文找 tourists / visitors 出现处","③ 定位 after the new railway... 与 attracted by quiet streets","④ 合并两点 → 选 B"],
+        原文定位:"The small town became a popular tourist destination after the new railway opened. ... attracted by its quiet streets",
+        关键词:"after, attracted by, quiet streets",
+        排除干扰:["A 现代建筑原文未提","C 节日原文未提","D 人口多原文说小镇 small，且有 friendly people 而非 large population"]
+      },
+      guidance:[
+        {prompt:"第一步：这道题问的是什么？",options:["小镇在哪里","小镇为什么受游客欢迎","小镇有多少人口"],correctIndex:1,wrongHint:"注意题干 made...popular 是'使……受欢迎'，问的是原因而非位置或数量，再读一遍题干。",rightHint:"对，你抓住了 made...popular 这个因果问法，方向就对了。"},
+        {prompt:"第二步：回原文，游客被什么吸引？",options:["新建的铁路和安静的街道","一场著名的节日","它的大城市规模"],correctIndex:0,wrongHint:"原文没有提到节日，也没有说它是大城市——这是命题人放的干扰项，要回到 after / by 去找依据。",rightHint:"很好，你注意到 after the new railway 和 attracted by its quiet streets 这两处并列依据，很多人会只看到铁路就选。",isLast:true}
+      ]
+    },
+    {
+      id:"q2", section:"完形填空",
+      stem:"语法填空示例：He ______ (go) to school by bike every day.",
+      options:["A. go","B. goes","C. went","D. going"],
+      answer:"B",
+      review:{
+        考点:"一般现在时第三人称单数",
+        设坑:"用 went 诱导忽略 every day 的时间标志",
+        易错:"看见过去语境就选 went，忽略 every day 表现在",
+        补救:"划出时间状语 every day → 现在时；主语 He 第三人称 → 加 s",
+        解题步骤:["① 找时间状语 every day → 一般现在时","② 主语 He 为三单","③ 动词 go 变 goes"],
+        原文定位:"every day 表经常性动作",
+        关键词:"every day, He",
+        排除干扰:["A 缺三单 s","C went 为过去时，与时间不符","D going 不能作谓语"]
+      },
+      guidance:[
+        {prompt:"第一步：every day 提示我们什么时态？",options:["一般过去时","一般现在时","现在完成时"],correctIndex:1,wrongHint:"every day 表示经常性、习惯性的动作，要用一般现在时，不是过去时。",rightHint:"没错，every day 是一般现在时的典型标志，你抓到了关键时间词。",isLast:true}
+      ]
+    }
+  ]
+};
+/* ===================== 数据结束 ===================== */
+
+/* ---------- 主题 ---------- */
+const SCHEMES={
+  red:{primary:"#c0392b",accent:"#e74c3c",soft:"#fff5f3"},
+  orange:{primary:"#e67e22",accent:"#f39c12",soft:"#fff8f0"},
+  green:{primary:"#27ae60",accent:"#2ecc71",soft:"#f1fbf4"},
+  blue:{primary:"#2980b9",accent:"#3498db",soft:"#f0f7fc"}
+};
+(function(){const s=SCHEMES[EXAM_DATA.colorScheme]||SCHEMES.blue;const r=document.documentElement.style;
+  r.setProperty("--primary",s.primary);r.setProperty("--accent",s.accent);r.setProperty("--soft",s.soft);})();
+document.getElementById("hdrTitle").textContent=EXAM_DATA.title;
+
+/* ---------- 工具函数 ---------- */
+const $=id=>document.getElementById(id);
+function esc(t){return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function highlightVocab(text){
+  let html=esc(text);
+  (EXAM_DATA.questions[state.idx].vocab||[]).forEach(v=>{
+    const w=v.word;const re=new RegExp("("+w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","gi");
+    html=html.replace(re,'<mark class="v" data-w="'+esc(w)+'">$1</mark>');
+  });
+  return html;
+}
+
+/* ---------- 状态 ---------- */
+const state={idx:0,magOn:false,zoom:1,annoOn:false};
+const isEnglish=(EXAM_DATA.subject||"").indexOf("英语")>=0;
+
+/* ---------- 大纲 ---------- */
+function renderOutline(){
+  const secs={};EXAM_DATA.questions.forEach((q,i)=>{(secs[q.section]=secs[q.section]||[]).push({q,i});});
+  let h="";Object.keys(secs).forEach(sec=>{
+    h+='<div class="sec"><div class="sec-title"><span class="dot"></span>'+esc(sec)+'</div>';
+    secs[sec].forEach(o=>{h+='<div class="qitem" data-i="'+o.i+'">'+esc(o.q.id||("第"+(o.i+1)+"题"))+'</div>';});
+    h+='</div>';
+  });
+  $("outlineBody").innerHTML=h;
+  document.querySelectorAll(".qitem").forEach(e=>e.onclick=()=>goto(+e.dataset.i));
+}
+function refreshOutline(){document.querySelectorAll(".qitem").forEach(e=>e.classList.toggle("active",+e.dataset.i===state.idx));}
+
+/* ---------- 题目渲染 ---------- */
+function renderQuestion(){
+  const q=EXAM_DATA.questions[state.idx];
+  let h='<div class="qhead"><span class="tag">'+esc(q.section)+'</span><span class="qno">'+(q.id||("第"+(state.idx+1)+"题"))+'</span></div>';
+  if(q.passage){h+='<div class="passage">'+highlightVocab(q.passage)+'</div>';}
+  h+='<div class="stem">'+highlightVocab(q.stem)+'</div>';
+  // 逐句点译
+  if(isEnglish && q.sentences && q.sentences.length){
+    h+='<div style="margin:6px 0 12px">';
+    q.sentences.forEach(s=>{h+='<div class="sent">'+esc(s.en)+'<div class="zh">'+esc(s.zh)+'</div></div>';});
+    h+='</div>';
+  }
+  // 选项
+  if(q.options && q.options.length){
+    h+='<div class="opts" id="opts">';
+    q.options.forEach((o,i)=>{h+='<div class="opt" data-i="'+i+'"><span class="mk">'+"ABCD"[i]+'.</span><span>'+esc(o.replace(/^[A-D]\.\s*/,""))+'</span></div>';});
+    h+='</div>';
+  }
+  // 听力
+  if(isEnglish && q.audio){
+    h+='<div style="margin-top:10px"><b style="color:var(--primary)">🎧 听力</b><br><audio controls src="'+q.audio+'"></audio></div>';
+  }
+  h+='<div class="answerbar"><span class="btn primary" id="revealAns">🔑 对答案</span><span class="answer" id="ansText"></span></div>';
+  if(state.annoOn){ctx.clearRect(0,0,cv.width,cv.height);setTimeout(sizeCanvas,30);}
+  $("qbody").innerHTML=h;
+  // 选项交互
+  const opts=$("opts");
+  if(opts){opts.querySelectorAll(".opt").forEach(el=>el.onclick=()=>{
+    if(opts.dataset.revealed)return;
+    opts.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));
+    el.classList.add("sel");
+  });}
+  $("revealAns").onclick=()=>{
+    if(opts)opts.dataset.revealed="1";
+    const correctLetter=(q.answer||"").trim().charAt(0).toUpperCase();
+    if(opts)opts.querySelectorAll(".opt").forEach((el,i)=>{
+      const L="ABCD"[i];
+      if(L===correctLetter)el.classList.add("right");
+      else if(el.classList.contains("sel"))el.classList.add("wrong");
+    });
+    $("ansText").textContent="正确答案："+(q.answer||"—");
+  };
+  // 词汇弹窗
+  document.querySelectorAll("mark.v").forEach(m=>m.onclick=(e)=>showVocab(m.dataset.w,e));
+  // 点译
+  document.querySelectorAll(".sent").forEach(s=>s.onclick=()=>s.classList.toggle("open"));
+  $("pgInfo").textContent=(state.idx+1)+" / "+EXAM_DATA.questions.length;
+  refreshOutline();
+  resetZoom();
+}
+
+/* ---------- 词汇弹窗 ---------- */
+function showVocab(w,e){
+  const q=EXAM_DATA.questions[state.idx];const v=(q.vocab||[]).find(x=>x.word.toLowerCase()===w.toLowerCase());
+  if(!v)return;
+  $("vocabBody").innerHTML='<div class="vw">'+esc(v.word)+' <span class="vp">'+esc(v.pos||"")+'</span></div>'
+    +'<div style="margin:6px 0"><span class="lab">释义：</span>'+esc(v.meaning||"")+'</div>'
+    +'<div><span class="lab">词根词缀：</span>'+(esc(v.root)||"—")+'</div>'
+    +'<div><span class="lab">搭配：</span>'+(esc(v.collocation)||"—")+'</div>'
+    +'<div><span class="lab">例句：</span>'+(esc(v.example)||"—")+'</div>'
+    +'<div><span class="lab">考法：</span>'+(esc(v.exam)||"—")+'</div>';
+  const p=$("vocabPop");p.style.display="block";
+  p.style.left=Math.min(e.clientX+12,innerWidth-320)+"px";
+  p.style.top=Math.min(e.clientY+12,innerHeight-220)+"px";
+}
+$("vocabClose").onclick=()=>$("vocabPop").style.display="none";
+document.addEventListener("click",e=>{if(!e.target.closest("#vocabPop")&&!e.target.closest("mark.v"))$("vocabPop").style.display="none";});
+
+/* ---------- 讲评 ---------- */
+function renderReview(){
+  const q=EXAM_DATA.questions[state.idx];const r=q.review||{};
+  let h="";
+  const f=(k,label)=>r[k]?('<div class="el"><b>'+label+'</b>'+esc(r[k])+'</div>'):"";
+  h+=f("考点","考点");h+=f("设坑","设坑");h+=f("易错","易错");h+=f("补救","补救");
+  if(r["解题步骤"]&&r["解题步骤"].length){h+='<div class="el lead"><b>解题步骤</b><ol class="steps">'+(r["解题步骤"].map(s=>"<li>"+esc(s)+"</li>").join(""))+'</ol></div>';}
+  h+=f("原文定位","原文定位");h+=f("关键词","关键词");
+  if(r["排除干扰"]&&r["排除干扰"].length){h+='<div class="el"><b>排除干扰</b><ul class="excl">'+(r["排除干扰"].map(s=>"<li>"+esc(s)+"</li>").join(""))+'</ul></div>';}
+  if(!h)h='<div class="hint">本题暂无讲评数据。</div>';
+  $("reviewBody").innerHTML=h;
+  openOv("reviewOv");
+}
+
+/* ---------- 引导 ---------- */
+let gStep=0;
+function renderGuide(){
+  gStep=0;const q=EXAM_DATA.questions[state.idx];const g=q.guidance||[];
+  if(!g.length){$("guideBody").innerHTML='<div class="hint">本题暂无引导脚本。</div>';openOv("guideOv");return;}
+  const dots=$("gDots");dots.innerHTML=g.map((_,i)=>'<i data-i="'+i+'"></i>').join("");
+  drawGuideStep();openOv("guideOv");
+}
+function drawGuideStep(){
+  const q=EXAM_DATA.questions[state.idx];const g=q.guidance;const s=g[gStep];
+  document.querySelectorAll("#gDots i").forEach((d,i)=>{d.classList.toggle("done",i<gStep);d.classList.toggle("cur",i===gStep);});
+  let h='<div class="gstep"><div class="q">'+esc(s.prompt)+'</div><div class="gopts" id="gOpts">';
+  s.options.forEach((o,i)=>{h+='<div class="gopt" data-i="'+i+'">'+esc(o)+'</div>';});
+  h+='</div><div class="fb" id="gFb"></div>';
+  if(gStep>0||s.isLast){} // 进度由 dots 体现
+  h+='<div class="gnext" id="gNext"></div></div>';
+  $("guideBody").innerHTML=h;
+  document.querySelectorAll("#gOpts .gopt").forEach(el=>el.onclick=()=>chooseOpt(+el.dataset.i));
+}
+function chooseOpt(i){
+  const q=EXAM_DATA.questions[state.idx];const s=q.guidance[gStep];
+  const fb=$("gFb");const el=document.querySelectorAll("#gOpts .gopt")[i];
+  if(i===s.correctIndex){
+    el.classList.add("correct");
+    fb.className="fb ok show";fb.textContent=s.rightHint||"正确！";
+    document.querySelectorAll("#gOpts .gopt").forEach(x=>x.onclick=null);
+    const next=$("gNext");
+    if(s.isLast){next.innerHTML='<span class="btn primary" onclick="closeGuide()">完成 ✓</span>';}
+    else{next.innerHTML='<span class="btn primary" id="gCont">下一步 →</span>';$("gCont").onclick=()=>{gStep++;drawGuideStep();};}
+  }else{
+    el.classList.add("wrong");
+    fb.className="fb no show";fb.textContent=s.wrongHint||"再想想，方向偏了。";
+  }
+}
+function closeGuide(){closeOv("guideOv");}
+window.closeGuide=closeGuide;
+
+/* ---------- 导航 ---------- */
+function goto(i){state.idx=(i+EXAM_DATA.questions.length)%EXAM_DATA.questions.length;renderQuestion();}
+$("prevBtn").onclick=()=>goto(state.idx-1);
+$("nextBtn").onclick=()=>goto(state.idx+1);
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="TEXTAREA")return;
+  if(e.key==="ArrowLeft")goto(state.idx-1);
+  if(e.key==="ArrowRight")goto(state.idx+1);
+  if(e.key==="Escape")document.querySelectorAll(".overlay.show").forEach(o=>o.classList.remove("show"));
+});
+
+/* ---------- 放大镜 ---------- */
+$("btnMag").onclick=()=>{
+  state.magOn=!state.magOn;$("btnMag").classList.toggle("on",state.magOn);
+  $("magCtrl").classList.toggle("show",state.magOn);
+  if(!state.magOn)resetZoom();
+};
+function resetZoom(){state.zoom=1;$("qcard").style.transform="scale(1)";$("magVal").textContent="1.0";}
+$("magReset").onclick=resetZoom;
+$("qcard").addEventListener("wheel",e=>{
+  if(!state.magOn)return;e.preventDefault();
+  state.zoom=Math.min(3,Math.max(1,state.zoom+(e.deltaY<0?0.15:-0.15)));
+  const rect=$("qcard").getBoundingClientRect();
+  $("qcard").style.transformOrigin=(e.clientX-rect.left)+"px "+(e.clientY-rect.top)+"px";
+  $("qcard").style.transform="scale("+state.zoom+")";
+  $("magVal").textContent=state.zoom.toFixed(1);
+},{passive:false});
+
+/* ---------- 批注 ---------- */
+const cv=$("annoCanvas");const ctx=cv.getContext("2d");let drawing=false,lastX=0,lastY=0;
+function sizeCanvas(){const r=$("qcard").getBoundingClientRect();cv.width=r.width;cv.height=r.height;cv.style.width=r.width+"px";cv.style.height=r.height+"px";}
+$("btnAnno").onclick=()=>{
+  state.annoOn=!state.annoOn;$("btnAnno").classList.toggle("on",state.annoOn);
+  cv.style.pointerEvents=state.annoOn?"auto":"none";
+  $("annoTip").classList.toggle("show",state.annoOn);
+  if(state.annoOn)setTimeout(sizeCanvas,30);
+};
+cv.addEventListener("mousedown",e=>{if(!state.annoOn)return;drawing=true;const r=cv.getBoundingClientRect();lastX=e.clientX-r.left;lastY=e.clientY-r.top;});
+cv.addEventListener("mousemove",e=>{if(!drawing)return;const r=cv.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;
+  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue("--bad")||"#e74c3c";ctx.lineWidth=3;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(lastX,lastY);ctx.lineTo(x,y);ctx.stroke();lastX=x;lastY=y;});
+window.addEventListener("mouseup",()=>drawing=false);
+window.addEventListener("resize",()=>{if(state.annoOn)sizeCanvas();});
+
+/* ---------- 点名 ---------- */
+let rollTimer=null;
+$("btnRoll").onclick=()=>{const ta=$("rollList");ta.value=(EXAM_DATA.roster||[]).join("\n");openOv("rollOv");};
+$("rollGo").onclick=()=>{const list=$("rollList").value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if(!list.length)return;$("rollGo").textContent="滚动中";clearInterval(rollTimer);
+  rollTimer=setInterval(()=>{$("rollName").textContent=list[Math.floor(Math.random()*list.length)];},60);};
+$("rollStop").onclick=()=>{clearInterval(rollTimer);$("rollGo").textContent="开始";};
+
+/* ---------- 计时器 ---------- */
+let tTimer=null,tLeft=0,tMode="up",tStart=0;
+function fmt(s){const m=Math.floor(s/60),ss=s%60;return String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0");}
+function tTick(){if(tMode==="up"){tLeft=Math.floor((Date.now()-tStart)/1000);}
+  else{tLeft--;if(tLeft<=0){tLeft=0;clearInterval(tTimer);alert("时间到！");}}$("timerDisp").textContent=fmt(tLeft);}
+$("btnTimer").onclick=()=>{
+  $("timerRow").innerHTML='<span class="btn primary" id="tUp">⏱ 正向计时</span>'
+    +'<span class="btn" data-m="60">1分钟</span><span class="btn" data-m="180">3分钟</span>'
+    +'<span class="btn" data-m="300">5分钟</span><span class="btn" data-m="600">10分钟</span>'
+    +'<span class="btn" id="tClear">⏹ 清零</span>';
+  $("tUp").onclick=()=>{clearInterval(tTimer);tMode="up";tStart=Date.now();tTimer=setInterval(tTick,1000);tTick();};
+  $("timerRow").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{clearInterval(tTimer);tMode="down";tLeft=+b.dataset.m;tTimer=setInterval(tTick,1000);tTick();});
+  $("tClear").onclick=()=>{clearInterval(tTimer);tLeft=0;$("timerDisp").textContent="00:00";};
+  openOv("timerOv");
+};
+
+/* ---------- 全屏 ---------- */
+$("btnFs").onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.();};
+
+/* ---------- 面板通用 ---------- */
+function openOv(id){$(id).classList.add("show");}
+function closeOv(id){$(id).classList.remove("show");}
+document.querySelectorAll("[data-close]").forEach(e=>e.onclick=()=>closeOv(e.dataset.close));
+document.querySelectorAll(".overlay").forEach(o=>o.onclick=e=>{if(e.target===o)o.classList.remove("show");});
+
+/* ---------- 绑定顶栏 ---------- */
+$("btnGuide").onclick=renderGuide;
+$("btnReview").onclick=renderReview;
+
+/* ---------- 启动 ---------- */
+renderOutline();renderQuestion();
+</script>
+</body>
+</html>
